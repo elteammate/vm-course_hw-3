@@ -133,10 +133,9 @@ namespace el {
         i32 last_instruction;
     };
 
-    struct Diagnostics {
+    struct Meta {
         i32 stage;
         std::vector<std::string> errors;
-        std::vector<i32> instruction_offsets;
         std::vector<bool> instruction_valid;
         std::vector<bool> jump_target;
     };
@@ -155,7 +154,7 @@ namespace el {
         u8 *code;
         usize code_size;
         usize globals_size;
-        Diagnostics meta;
+        Meta meta;
 
         [[nodiscard]] char *get_string(i32 offset) const {
             if (offset < 0 || offset >= strings_size) [[unlikely]] {
@@ -194,10 +193,9 @@ namespace el {
             i32 arg = get_arg(offset);
             return get_string(arg);
         }
-    };
+    } static bc;
 
-    Bytecode bytecode_from_bytes(void *buffer, usize size) {
-        Bytecode bc{};
+    void bytecode_from_bytes(void *buffer, usize size) {
         bc.buffer = buffer;
 
         struct Header {
@@ -224,10 +222,12 @@ namespace el {
 
         bc.code_size = size - (usize)(bc.code - (u8 *)buffer);
         bc.globals_size = header.globals_size;
-        return bc;
+        bc.meta = Meta{
+            .stage = 0,
+        };
     }
 
-    std::pair<std::vector<u8>, Bytecode> bytecode_from_file(const char *filename) {
+    std::vector<u8> bytecode_from_file(const char *filename) {
         FILE *f;
         if (std::string(filename) == "-") {
             f = stdin;
@@ -259,10 +259,11 @@ namespace el {
             throw std::runtime_error("Failed to read file: " + std::string(filename));
         }
 
-        return {std::move(bytecode), bytecode_from_bytes(bytecode.data(), bytecode.size())};
+        bytecode_from_bytes(bytecode.data(), bytecode.size());
+        return bytecode;
     }
 
-    std::variant<i32, std::string> get_instruction_size(const Bytecode &bc, i32 offset) {
+    std::variant<i32, std::string> get_instruction_size(i32 offset) {
         if (offset < 0 || offset >= bc.code_size) {
             return std::format("get_instruction_size: Code offset {} out of range", offset);
         }
@@ -366,104 +367,102 @@ namespace el {
         }
     }
 
-    // Checks validity of instructions and determines instrution boundaries
-    void analyze_bytecode_stage1(Bytecode &bc) {
-        bc.meta = Diagnostics{};
+    void analyze_bytecode_stage1() {
+        bc.meta = Meta{};
+
         if (auto code = bc.code; code[bc.code_size - 1] != 0xff) {
             bc.meta.errors.emplace_back("Code section must end with 0xff byte");
         }
 
         bc.meta.instruction_valid.assign(bc.code_size, false);
+        bc.meta.jump_target.assign(bc.code_size, false);
 
-        for (i32 offset = 0; offset < bc.code_size;) {
-            bc.meta.instruction_offsets.push_back(offset);
-            bc.meta.instruction_valid[offset] = true;
-            auto size = get_instruction_size(bc, offset);
-            if (std::holds_alternative<std::string>(size)) {
-                bc.meta.errors.emplace_back(std::get<std::string>(size));
-                break;
-            } else {
-                i32 old_offset = offset;
-                offset += std::get<i32>(size);
-                if (offset <= old_offset || offset > bc.code_size) {
-                    bc.meta.errors.emplace_back("Instruction size is out of bounds");
+        std::vector<i32> queue;
+        queue.reserve(bc.public_table_size);
+        for (i32 i = 0; i < bc.public_table_size; i++) {
+            queue.push_back(bc.public_table[i].offset);
+        }
+
+        while (!queue.empty()) {
+            i32 offset = queue.back();
+            queue.pop_back();
+            bc.meta.jump_target[offset] = true;
+            while (true) {
+                auto size = get_instruction_size(offset);
+                if (std::holds_alternative<std::string>(size)) {
+                    bc.meta.errors.emplace_back(std::get<std::string>(size));
+                    continue;
+                }
+
+                bc.meta.instruction_valid[offset] = true;
+
+                switch (bc.get_opcode(offset)) {
+                case Op::JMP: {
+                    i32 target = bc.get_arg(offset + 1);
+                    if (target < 0 || target >= bc.code_size) {
+                        bc.meta.errors.emplace_back("Invalid target offset");
+                        goto break_walk;
+                    }
+                    if (!bc.meta.jump_target[target]) {
+                        queue.push_back(target);
+                    }
+                    goto break_walk;
+                }
+                kase Op::CJMPZ:
+                case Op::CJMPNZ: {
+                    i32 target = bc.get_arg(offset + 1);
+                    if (target < 0 || target >= bc.code_size) {
+                        bc.meta.errors.emplace_back("Invalid target offset");
+                        goto break_walk;
+                    }
+                    if (!bc.meta.jump_target[target]) {
+                        queue.push_back(target);
+                    }
+                }
+                kase Op::END:
+                case Op::STOP:
+                    goto break_walk;
+                kase Op::CBEGIN:
+                case Op::BEGIN:
+                    if (!bc.meta.jump_target[offset]) {
+                        bc.meta.errors.emplace_back(
+                            "BEGIN and CBEGIN instructions are only allowed at the start of the function"
+                        );
+                    }
+                    break;
+                kase Op::CALL:
+                case Op::CLOSURE: {
+                    i32 fn = bc.get_arg(offset + 1);
+                    if (fn < 0 || fn >= bc.code_size) {
+                        bc.meta.errors.emplace_back("Invalid function offset");
+                        goto break_walk;
+                    }
+                    u8 first_opcode = bc.get_byte(fn);
+                    if (first_opcode != (u8)Op::BEGIN && first_opcode != (u8)Op::CBEGIN) {
+                        bc.meta.errors.emplace_back("Function must start with BEGIN or CBEGIN");
+                        goto break_walk;
+                    }
+                    if (!bc.meta.jump_target[fn]) {
+                        queue.push_back(fn);
+                    }
+                }
+                default:
                     break;
                 }
+                offset += std::get<i32>(size);
             }
+            break_walk:
+            (void)0;
         }
 
         bc.meta.stage = 1;
     }
 
-    // Checks validity of jumps, figures out jump labels
-    void analyze_bytecode_stage2(Bytecode &bc) {
-        assert(bc.meta.stage == 1);
-
-        bc.meta.jump_target.assign(bc.code_size, false);
-
-        for (i32 offset : bc.meta.instruction_offsets) {
-            Op op = bc.get_opcode(offset);
-            switch (op) {
-            case Op::JMP:
-            case Op::CJMPZ:
-            case Op::CJMPNZ: {
-                i32 target = bc.get_arg(offset + 1);
-                if (target < 0 || target >= bc.code_size || !bc.meta.instruction_valid[target]) {
-                    bc.meta.errors.emplace_back("Invalid target offset");
-                    break;
-                }
-                bc.meta.jump_target[target] = true;
-            }
-
-            kase Op::CBEGIN:
-            case Op::BEGIN:
-                bc.meta.jump_target[offset] = true;
-
-            kase Op::CALL: {
-                i32 fn = bc.get_arg(offset + 1);
-                if (fn < 0 || fn >= bc.code_size || !bc.meta.instruction_valid[fn]) {
-                    bc.meta.errors.emplace_back("Invalid function offset");
-                    break;
-                }
-                if (bc.get_opcode(fn) != Op::BEGIN) {
-                    bc.meta.errors.emplace_back("CALL instruction does not point to BEGIN instruction");
-                    break;
-                }
-                // bc.diag.jump_target[fn] = true;
-                bc.meta.jump_target[offset + std::get<i32>(get_instruction_size(bc, offset))] = true;
-            }
-
-            kase Op::CLOSURE: {
-                i32 fn = bc.get_arg(offset + 1);
-                if (fn < 0 || fn >= bc.code_size || !bc.meta.instruction_valid[fn]) {
-                    bc.meta.errors.emplace_back("Invalid function offset");
-                    break;
-                }
-                Op first_fn_op = bc.get_opcode(fn);
-                if (first_fn_op != Op::BEGIN && first_fn_op != Op::CBEGIN) {
-                    bc.meta.errors.emplace_back("CLOSURE instruction does not point to [C]BEGIN instruction");
-                    break;
-                }
-                // bc.diag.jump_target[fn] = true;
-            }
-
-            kase Op::CALLC: {
-                bc.meta.jump_target[offset + std::get<i32>(get_instruction_size(bc, offset))] = true;
-            }
-
-            otherwise: break;
-            }
-        }
-
-        bc.meta.stage = 2;
+    void analyze_bytecode() {
+        analyze_bytecode_stage1();
     }
 
-    void analyze_bytecode(Bytecode &bc) {
-        analyze_bytecode_stage1(bc);
-        if (bc.meta.errors.empty()) analyze_bytecode_stage2(bc);
-    }
-
-    void dump_instruction(FILE *f, const Bytecode &bc, i32 offset) {
+    void dump_instruction(FILE *f, i32 offset) {
         if (bc.meta.stage < 1) {
             throw std::runtime_error("Bytecode must be analyzed before formatting");
         }
@@ -571,7 +570,7 @@ namespace el {
         }
     }
 
-    void dump_bytecode(FILE *f, const Bytecode &bc) {
+    void dump_bytecode(FILE *f) {
         if (bc.meta.stage < 1) {
             throw std::runtime_error("Bytecode must be analyzed before formatting");
         }
@@ -587,9 +586,12 @@ namespace el {
         }
         std::fprintf(f, "Code:\n");
 
-        for (i32 offset : bc.meta.instruction_offsets) {
+        for (i32 offset = 0; offset < bc.code_size; offset++) {
+            if (!bc.meta.instruction_valid[offset]) {
+                continue;
+            }
             std::fprintf(f, "0x%.8x:\t", offset);
-            dump_instruction(f, bc, offset);
+            dump_instruction(f, offset);
             std::fprintf(f, "\n");
         }
     }
@@ -597,109 +599,124 @@ namespace el {
 
 
 struct CodeRange {
-    u8 *code;
-    i32 offset;
-    i32 size;
+    u32 offset : 31;
+    bool binary : 1;
+
+    [[nodiscard]] std::pair<u8 *, i32> locate() const {
+        using el::bc;
+        i32 size1 = std::get<i32>(el::get_instruction_size((i32)this->offset));
+        if (this->binary) {
+            i32 size2 = std::get<i32>(el::get_instruction_size((i32)this->offset + size1));
+            return {bc.code + this->offset, size1 + size2};
+        }
+        return {bc.code + this->offset, size1};
+    }
+
+    std::strong_ordering operator<=>(const CodeRange &other) const {
+        using el::bc;
+        if (this->binary != other.binary) return this->binary <=> other.binary;
+        auto [this_code, this_size] = this->locate();
+        auto [other_code, other_size] = other.locate();
+        if (this_size != other_size) return this_size <=> other_size;
+        return std::memcmp(this_code, other_code, this_size) <=> 0;
+    }
 
     bool operator==(const CodeRange &other) const {
-        if (this->size != other.size) return false;
-        return std::memcmp(this->code + this->offset, other.code + other.offset, this->size) == 0;
+        return *this <=> other == std::strong_ordering::equal;
     }
 };
 
 struct CodeRangeHasher {
     size_t operator()(const CodeRange &i) const {
-        return std::hash<std::string_view>{}({(char *)i.code + i.offset, (size_t)i.size});
+        auto [code, size] = i.locate();
+        return std::hash<std::string_view>{}({(char *)code, (size_t)size});
     }
 };
 
-void count_unary_idioms(const el::Bytecode &bc) {
+void count_idioms() {
+    using el::bc;
+
     assert(bc.meta.stage >= 1);
 
-    std::unordered_map<CodeRange, i32, CodeRangeHasher> counter;
+    std::vector<CodeRange> idioms;
+    idioms.reserve(bc.code_size * 2);
 
-    for (i32 i = 0; i < bc.meta.instruction_offsets.size() - 1; i++) {
-        i32 start = bc.meta.instruction_offsets[i];
-        i32 end = bc.meta.instruction_offsets[i + 1];
-        CodeRange inst{
-            .code = bc.code,
-            .offset = start,
-            .size = end - start,
-        };
-        counter[inst]++;
-    }
-
-    std::vector<std::pair<CodeRange, i32>> result(counter.begin(), counter.end());
-    std::ranges::sort(result, [](const auto &a, const auto &b) {
-        return a.second > b.second;
-    });
-
-    std::printf("Most common unary idioms:\n");
-    std::printf("Rank Occurs\tIdiom\n");
-    for (i32 i = 0; i < result.size(); ++i) {
-        const auto &[inst, count] = result[i];
-        std::printf("%4d:", i + 1);
-        std::printf("%6d\t", count);
-        el::dump_instruction(stdout, bc, inst.offset);
-        std::printf("\n");
-    }
-}
-
-void count_binary_idioms(const el::Bytecode &bc) {
-    assert(bc.meta.stage >= 2);
-
-    std::unordered_map<CodeRange, i32, CodeRangeHasher> counter;
-
-    for (i32 i = 0; i < bc.meta.instruction_offsets.size() - 2; i++) {
-        i32 start1 = bc.meta.instruction_offsets[i];
-        i32 start2 = bc.meta.instruction_offsets[i + 1];
-        i32 end = bc.meta.instruction_offsets[i + 2];
-        if (bc.meta.jump_target[start2]) {
+    for (i32 offset = 0; offset < bc.code_size; offset++) {
+        if (!bc.meta.instruction_valid[offset]) {
             continue;
         }
-        CodeRange insts{
-            .code = bc.code,
-            .offset = start1,
-            .size = end - start1,
+        i32 size = std::get<i32>(el::get_instruction_size(offset));
+        CodeRange inst{
+            .offset = (u32)offset,
+            .binary = false,
         };
-        counter[insts]++;
+        idioms.push_back(inst);
+
+        if (bc.meta.instruction_valid[offset + size] && !bc.meta.jump_target[offset + size]) {
+            CodeRange bin_inst{
+                .offset = (u32)offset,
+                .binary = true,
+            };
+            idioms.push_back(bin_inst);
+        }
     }
 
-    std::vector<std::pair<CodeRange, i32>> result(counter.begin(), counter.end());
-    std::ranges::sort(result, [](const auto &a, const auto &b) {
+    std::ranges::sort(idioms);
+
+    std::vector<std::pair<CodeRange, i32>> counts;
+
+    counts.emplace_back(idioms[0], 1);
+
+    for (usize i = 1; i < idioms.size(); i++) {
+        if (idioms[i] == counts.back().first) {
+            counts.back().second++;
+        } else {
+            counts.emplace_back(idioms[i], 1);
+        }
+    }
+
+    std::ranges::sort(counts, [](const auto &a, const auto &b) {
         return a.second > b.second;
     });
 
-    std::printf("Most common binary idioms:\n");
+    std::printf("Most common idioms:\n");
     std::printf("Rank Occurs\tIdiom\n");
-    for (i32 i = 0; i < result.size(); ++i) {
-        const auto &[insts, count] = result[i];
+    for (i32 i = 0; i < counts.size(); ++i) {
+        const auto &[inst, count] = counts[i];
         std::printf("%4d:", i + 1);
         std::printf("%6d\t", count);
-        el::dump_instruction(stdout, bc, insts.offset);
-        i32 first_inst_size = std::get<i32>(get_instruction_size(bc, insts.offset));
-        std::printf("\n%11s\t", "");
-        el::dump_instruction(stdout, bc, insts.offset + first_inst_size);
+        el::dump_instruction(stdout, (i32)inst.offset);
+        if (inst.binary) {
+            std::printf("\n");
+            std::printf("%11s\t", "");
+            i32 size = std::get<i32>(el::get_instruction_size((i32)inst.offset));
+            el::dump_instruction(stdout, (i32)inst.offset + size);
+        }
         std::printf("\n");
     }
 }
 
+
 i32 app_decompile(const char *bytecode_filename) {
-    auto [guard, bc] = el::bytecode_from_file(bytecode_filename);
-    el::analyze_bytecode_stage1(bc);
+    using el::bc;
+
+    auto guard = el::bytecode_from_file(bytecode_filename);
+    el::analyze_bytecode_stage1();
     if (!bc.meta.errors.empty()) {
         for (const auto& err : bc.meta.errors) {
             std::fprintf(stderr, "Bytecode validation error: %s\n", err.c_str());
         }
         return 1;
     }
-    dump_bytecode(stdout, bc);
+    el::dump_bytecode(stdout);
     return 0;
 }
 
 i32 app_count_idioms(const char *bytecode_filename) {
-    auto [guard, bc] = el::bytecode_from_file(bytecode_filename);
-    el::analyze_bytecode(bc);
+    using el::bc;
+
+    auto guard = el::bytecode_from_file(bytecode_filename);
+    el::analyze_bytecode();
     if (!bc.meta.errors.empty()) {
         for (const auto& err : bc.meta.errors) {
             std::fprintf(stderr, "Bytecode validation error: %s\n", err.c_str());
@@ -708,11 +725,9 @@ i32 app_count_idioms(const char *bytecode_filename) {
     }
 
     std::printf("Bytecode:\n");
-    dump_bytecode(stdout, bc);
+    el::dump_bytecode(stdout);
     std::printf("\n");
-    count_unary_idioms(bc);
-    std::printf("\n");
-    count_binary_idioms(bc);
+    count_idioms();
 
     return 0;
 }

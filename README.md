@@ -217,7 +217,6 @@ Code:
 0x000002c6:	JMP	0x000002fa
 0x000002cb:	FAIL	7 17
 0x000002d4:	JMP	0x000002fa
-0x000002d9:	JMP	0x000002fa
 0x000002de:	DUP
 0x000002df:	DROP
 0x000002e0:	DROP
@@ -227,282 +226,290 @@ Code:
 0x000002f0:	CALL	Barray	2
 0x000002f5:	JMP	0x000002fa
 0x000002fa:	END
-0x000002fb:	<end>
 
-Most common unary idioms:
+Most common idioms:
 Rank Occurs	Idiom
    1:    31	DROP
    2:    28	DUP
    3:    21	ELEM
    4:    16	CONST	1
-   5:    11	CONST	0
-   6:     7	LD	A(0)
-   7:     5	END
-   8:     5	JMP	0x000002fa
-   9:     4	SEXP	cons 2
-  10:     3	JMP	0x0000015e
-  11:     3	ARRAY	2
-  12:     3	CALL	Barray	2
-  13:     3	ST	L(0)
-  14:     3	LD	L(3)
-  15:     3	LD	L(0)
-  16:     3	CALL	0x0000015f 1
-  17:     2	LD	L(1)
-  18:     2	JMP	0x00000074
-  19:     2	CALL	0x0000002b 1
-  20:     2	TAG	cons 2
-  21:     2	BINOP	==
-  22:     2	BEGIN	1 0
-  23:     2	CALL	0x00000097 1
-  24:     1	BEGIN	1 6
-  25:     1	BEGIN	2 0
-  26:     1	JMP	0x000002de
-  27:     1	CJMPz	0x00000258
-  28:     1	LINE	3
-  29:     1	CJMPz	0x0000006a
-  30:     1	CJMPnz	0x00000188
-  31:     1	CJMPnz	0x00000118
-  32:     1	LD	L(2)
-  33:     1	FAIL	14 9
-  34:     1	CJMPnz	0x000001ac
-  35:     1	LINE	20
-  36:     1	ST	L(2)
-  37:     1	LINE	5
-  38:     1	LINE	16
-  39:     1	ST	L(1)
-  40:     1	LINE	15
-  41:     1	LINE	9
-  42:     1	CJMPz	0x00000112
-  43:     1	LD	L(4)
-  44:     1	LD	L(5)
-  45:     1	ST	L(4)
-  46:     1	CJMPnz	0x0000027d
-  47:     1	JMP	0x00000106
-  48:     1	BEGIN	1 1
-  49:     1	CJMPz	0x000000bf
-  50:     1	ST	L(3)
-  51:     1	LINE	6
-  52:     1	JMP	0x000002cb
-  53:     1	LINE	18
-  54:     1	ST	L(5)
-  55:     1	CALL	0x00000075 1
-  56:     1	LINE	25
-  57:     1	JMP	0x00000150
-  58:     1	CJMPnz	0x000000c5
-  59:     1	BINOP	-
-  60:     1	LINE	7
-  61:     1	CONST	10000
-  62:     1	JMP	0x00000182
-  63:     1	LINE	27
-  64:     1	FAIL	7 17
-  65:     1	LINE	14
-  66:     1	LINE	24
-  67:     1	BINOP	>
-
-Most common binary idioms:
-Rank Occurs	Idiom
-   1:    13	CONST	1
+   5:    13	CONST	1
            	ELEM
-   2:    11	DUP
+   6:    11	DROP
+           	DUP
+   7:    11	CONST	0
+   8:    11	DUP
            	CONST	1
-   3:    11	DROP
-           	DUP
-   4:    10	DROP
+   9:    10	DROP
            	DROP
-   5:     8	CONST	0
+  10:     8	CONST	0
            	ELEM
-   6:     7	ELEM
-           	DROP
-   7:     7	DUP
+  11:     7	LD	A(0)
+  12:     7	DUP
            	CONST	0
-   8:     4	DUP
-           	DUP
-   9:     3	ELEM
-           	ST	L(0)
-  10:     3	ST	L(0)
+  13:     7	ELEM
            	DROP
-  11:     3	CALL	Barray	2
+  14:     5	END
+  15:     4	SEXP	cons 2
+  16:     4	DUP
+           	DUP
+  17:     4	JMP	0x000002fa
+  18:     3	CALL	Barray	2
+  19:     3	CALL	Barray	2
            	JMP	0x000002fa
-  12:     3	DUP
+  20:     3	ARRAY	2
+  21:     3	DUP
            	ARRAY	2
-  13:     2	ELEM
-           	CONST	1
-  14:     2	DUP
+  22:     3	ST	L(0)
+  23:     3	ELEM
+           	ST	L(0)
+  24:     3	LD	L(3)
+  25:     3	ST	L(0)
+           	DROP
+  26:     3	LD	L(0)
+  27:     3	CALL	0x0000015f 1
+  28:     3	JMP	0x0000015e
+  29:     2	DUP
            	TAG	cons 2
-  15:     2	ELEM
-           	CONST	0
-  16:     2	SEXP	cons 2
+  30:     2	CALL	0x0000015f 1
+           	DUP
+  31:     2	BINOP	==
+  32:     2	TAG	cons 2
+  33:     2	CALL	0x00000097 1
+  34:     2	SEXP	cons 2
            	CALL	Barray	2
-  17:     1	CJMPz	0x000000bf
-           	DUP
-  18:     1	CONST	0
-           	BINOP	==
-  19:     1	LD	L(1)
-           	LD	L(3)
-  20:     1	DROP
-           	JMP	0x00000150
-  21:     1	ELEM
-           	ST	L(4)
-  22:     1	LINE	24
-           	LD	A(0)
-  23:     1	ST	L(2)
-           	DROP
-  24:     1	ST	L(5)
-           	DROP
-  25:     1	BINOP	==
-           	CJMPz	0x000000bf
-  26:     1	LINE	15
-           	LD	L(0)
-  27:     1	BINOP	>
-           	CJMPz	0x00000258
-  28:     1	LD	A(0)
-           	CJMPz	0x0000006a
-  29:     1	CONST	1
-           	BINOP	==
-  30:     1	SEXP	cons 2
-           	JMP	0x00000074
-  31:     1	ELEM
-           	SEXP	cons 2
-  32:     1	BINOP	-
-           	CALL	0x0000002b 1
-  33:     1	BINOP	==
-           	CJMPz	0x00000112
-  34:     1	DROP
-           	JMP	0x000002de
-  35:     1	LINE	18
-           	LINE	20
-  36:     1	LD	L(1)
-           	BINOP	>
-  37:     1	ARRAY	2
-           	CJMPnz	0x0000027d
-  38:     1	TAG	cons 2
-           	CJMPnz	0x00000188
-  39:     1	LD	L(3)
-           	LD	L(0)
-  40:     1	DROP
-           	JMP	0x000002cb
-  41:     1	LD	L(0)
-           	JMP	0x0000015e
-  42:     1	DROP
-           	LINE	16
-  43:     1	CJMPz	0x00000112
-           	DUP
-  44:     1	DROP
-           	LINE	15
-  45:     1	LINE	3
-           	LD	A(0)
-  46:     1	ELEM
-           	DUP
-  47:     1	ARRAY	2
-           	CJMPnz	0x00000118
-  48:     1	LD	L(0)
-           	CALL	0x00000097 1
-  49:     1	DROP
-           	JMP	0x00000182
-  50:     1	ELEM
-           	ST	L(1)
-  51:     1	CJMPz	0x0000006a
-           	LD	A(0)
-  52:     1	ELEM
-           	ST	L(3)
-  53:     1	BEGIN	1 6
-           	LINE	3
-  54:     1	LINE	6
-           	LD	L(1)
-  55:     1	BEGIN	1 1
-           	LINE	14
-  56:     1	ARRAY	2
-           	CJMPnz	0x000000c5
-  57:     1	CJMPnz	0x000001ac
-           	DROP
-  58:     1	ST	L(3)
-           	DROP
-  59:     1	ELEM
-           	ST	L(2)
-  60:     1	ST	L(1)
-           	DROP
-  61:     1	DROP
-           	LINE	5
-  62:     1	LINE	5
-           	LD	L(3)
-  63:     1	LD	L(3)
-           	LD	L(1)
-  64:     1	CJMPz	0x00000258
-           	CONST	1
-  65:     1	LD	L(4)
-           	SEXP	cons 2
-  66:     1	FAIL	7 17
-           	JMP	0x000002fa
-  67:     1	JMP	0x000002fa
-           	JMP	0x000002fa
-  68:     1	DROP
-           	LD	L(5)
-  69:     1	LD	L(3)
-           	LD	L(4)
-  70:     1	LD	L(0)
-           	SEXP	cons 2
-  71:     1	SEXP	cons 2
-           	CALL	0x0000015f 1
-  72:     1	LINE	7
-           	LD	L(2)
-  73:     1	LD	L(2)
-           	CALL	0x0000015f 1
-  74:     1	CJMPnz	0x0000027d
-           	DROP
-  75:     1	ELEM
-           	ST	L(5)
-  76:     1	ST	L(4)
-           	DROP
-  77:     1	DUP
-           	DROP
-  78:     1	DROP
+  35:     2	JMP	0x00000074
+  36:     2	BEGIN	1 0
+  37:     2	CALL	0x0000002b 1
+  38:     2	LD	L(1)
+  39:     2	ELEM
            	CONST	0
-  79:     1	LINE	9
-           	LD	A(0)
-  80:     1	LD	A(0)
-           	CALL	Barray	2
-  81:     1	BEGIN	2 0
-           	LINE	25
-  82:     1	FAIL	14 9
-           	JMP	0x0000015e
-  83:     1	LINE	20
-           	LD	A(0)
-  84:     1	CONST	10000
-           	CALL	0x0000002b 1
-  85:     1	LD	L(5)
-           	LD	L(3)
-  86:     1	BEGIN	1 0
-           	LINE	24
-  87:     1	LD	A(0)
+  40:     2	ELEM
            	CONST	1
-  88:     1	LINE	27
-           	CONST	10000
-  89:     1	LD	A(0)
-           	LD	A(0)
-  90:     1	TAG	cons 2
-           	CJMPnz	0x000001ac
-  91:     1	LINE	16
-           	LD	L(0)
-  92:     1	CONST	1
-           	BINOP	-
-  93:     1	LINE	25
-           	LINE	27
-  94:     1	DROP
-           	JMP	0x00000106
-  95:     1	CONST	0
-           	JMP	0x00000074
-  96:     1	CONST	1
-           	LINE	6
-  97:     1	CONST	0
+  41:     1	CONST	0
            	LINE	9
-  98:     1	BEGIN	1 0
-           	LINE	18
-  99:     1	LD	A(0)
-           	CALL	0x00000097 1
- 100:     1	LD	A(0)
-           	CALL	0x0000015f 1
- 101:     1	LINE	14
+  42:     1	CJMPz	0x00000258
+           	CONST	1
+  43:     1	LD	A(0)
+           	CALL	Barray	2
+  44:     1	LD	A(0)
+           	CJMPz	0x0000006a
+  45:     1	LD	A(0)
            	LD	A(0)
- 102:     1	LD	A(0)
+  46:     1	LD	A(0)
+           	CONST	1
+  47:     1	CJMPz	0x0000006a
+           	LD	A(0)
+  48:     1	CONST	0
+           	JMP	0x00000074
+  49:     1	ST	L(2)
+           	DROP
+  50:     1	ST	L(3)
+           	DROP
+  51:     1	ST	L(4)
+           	DROP
+  52:     1	ST	L(5)
+           	DROP
+  53:     1	CJMPz	0x00000112
            	DUP
+  54:     1	CJMPz	0x000000bf
+           	DUP
+  55:     1	CJMPnz	0x0000027d
+           	DROP
+  56:     1	CJMPnz	0x000001ac
+           	DROP
+  57:     1	BINOP	-
+           	CALL	0x0000002b 1
+  58:     1	LD	L(5)
+           	LD	L(3)
+  59:     1	LINE	3
+           	LD	A(0)
+  60:     1	CONST	1
+           	LINE	6
+  61:     1	ELEM
+           	SEXP	cons 2
+  62:     1	LD	L(0)
+           	JMP	0x0000015e
+  63:     1	LD	L(1)
+           	LD	L(3)
+  64:     1	LD	L(3)
+           	LD	L(0)
+  65:     1	LD	L(3)
+           	LD	L(1)
+  66:     1	LD	L(3)
+           	LD	L(4)
+  67:     1	BEGIN	2 0
+           	LINE	25
+  68:     1	LD	L(0)
+           	CALL	0x00000097 1
+  69:     1	LD	L(2)
+           	CALL	0x0000015f 1
+  70:     1	LD	L(4)
+           	SEXP	cons 2
+  71:     1	LD	A(0)
+           	CALL	0x0000015f 1
+  72:     1	LD	A(0)
+           	CALL	0x00000097 1
+  73:     1	BEGIN	1 0
+           	LINE	18
+  74:     1	BEGIN	1 0
+           	LINE	24
+  75:     1	BEGIN	1 1
+           	LINE	14
+  76:     1	BEGIN	1 6
+           	LINE	3
+  77:     1	LD	L(0)
+           	SEXP	cons 2
+  78:     1	CALL	0x0000015f 1
+           	CONST	1
+  79:     1	CALL	0x00000097 1
+           	JMP	0x0000015e
+  80:     1	TAG	cons 2
+           	CJMPnz	0x00000188
+  81:     1	TAG	cons 2
+           	CJMPnz	0x000001ac
+  82:     1	FAIL	7 17
+           	JMP	0x000002fa
+  83:     1	FAIL	14 9
+           	JMP	0x0000015e
+  84:     1	SEXP	cons 2
+           	CALL	0x0000015f 1
+  85:     1	CALL	0x0000002b 1
+           	SEXP	cons 2
+  86:     1	CALL	0x0000002b 1
+           	CALL	0x00000075 1
+  87:     1	LINE	14
+           	LD	A(0)
+  88:     1	CALL	0x00000097 1
+           	END
+  89:     1	ARRAY	2
+           	CJMPnz	0x00000118
+  90:     1	ARRAY	2
+           	CJMPnz	0x0000027d
+  91:     1	ARRAY	2
+           	CJMPnz	0x000000c5
+  92:     1	DROP
+           	LD	L(5)
+  93:     1	LINE	5
+           	LD	L(3)
+  94:     1	LINE	6
+           	LD	L(1)
+  95:     1	LINE	7
+           	LD	L(2)
+  96:     1	LINE	9
+           	LD	A(0)
+  97:     1	CALL	0x00000075 1
+           	END
+  98:     1	LINE	15
+           	LD	L(0)
+  99:     1	LINE	16
+           	LD	L(0)
+ 100:     1	LINE	18
+           	LINE	20
+ 101:     1	LINE	20
+           	LD	A(0)
+ 102:     1	LINE	24
+           	LD	A(0)
+ 103:     1	LINE	25
+           	LINE	27
+ 104:     1	LINE	27
+           	CONST	10000
+ 105:     1	CONST	10000
+           	CALL	0x0000002b 1
+ 106:     1	SEXP	cons 2
+           	JMP	0x00000074
+ 107:     1	LINE	5
+ 108:     1	CJMPz	0x0000006a
+ 109:     1	CJMPz	0x000000bf
+ 110:     1	CJMPnz	0x00000118
+ 111:     1	CJMPnz	0x0000027d
+ 112:     1	CJMPnz	0x00000188
+ 113:     1	CJMPnz	0x000001ac
+ 114:     1	CJMPnz	0x000000c5
+ 115:     1	LINE	3
+ 116:     1	CJMPz	0x00000258
+ 117:     1	LINE	6
+ 118:     1	LINE	7
+ 119:     1	LINE	9
+ 120:     1	LINE	14
+ 121:     1	LINE	15
+ 122:     1	LINE	16
+ 123:     1	LINE	18
+ 124:     1	LINE	20
+ 125:     1	LD	L(4)
+ 126:     1	BINOP	>
+ 127:     1	CONST	10000
+ 128:     1	JMP	0x00000106
+ 129:     1	JMP	0x00000150
+ 130:     1	JMP	0x00000182
+ 131:     1	JMP	0x000002cb
+ 132:     1	JMP	0x000002de
+ 133:     1	LD	L(2)
+ 134:     1	LINE	24
+ 135:     1	LD	L(5)
+ 136:     1	ST	L(1)
+ 137:     1	ST	L(2)
+ 138:     1	ST	L(3)
+ 139:     1	ST	L(4)
+ 140:     1	ST	L(5)
+ 141:     1	CJMPz	0x00000112
+ 142:     1	DROP
+           	LINE	16
+ 143:     1	DROP
+           	JMP	0x00000106
+ 144:     1	DROP
+           	JMP	0x00000150
+ 145:     1	DROP
+           	JMP	0x00000182
+ 146:     1	DROP
+           	JMP	0x000002cb
+ 147:     1	DROP
+           	JMP	0x000002de
+ 148:     1	BINOP	-
+ 149:     1	DROP
+           	LINE	5
+ 150:     1	DROP
+           	LINE	15
+ 151:     1	DROP
+           	CONST	0
+ 152:     1	ELEM
+           	ST	L(1)
+ 153:     1	ELEM
+           	ST	L(2)
+ 154:     1	ELEM
+           	ST	L(3)
+ 155:     1	ELEM
+           	ST	L(4)
+ 156:     1	ELEM
+           	ST	L(5)
+ 157:     1	LD	L(1)
+           	BINOP	>
+ 158:     1	LD	A(0)
+           	DUP
+ 159:     1	DUP
+           	DROP
+ 160:     1	LINE	25
+ 161:     1	LINE	27
+ 162:     1	BEGIN	1 1
+ 163:     1	BEGIN	1 6
+ 164:     1	BEGIN	2 0
+ 165:     1	CALL	0x00000075 1
+ 166:     1	FAIL	7 17
+ 167:     1	FAIL	14 9
+ 168:     1	ST	L(1)
+           	DROP
+ 169:     1	ELEM
+           	DUP
+ 170:     1	BINOP	>
+           	CJMPz	0x00000258
+ 171:     1	BINOP	==
+           	CJMPz	0x00000112
+ 172:     1	BINOP	==
+           	CJMPz	0x000000bf
+ 173:     1	CONST	0
+           	BINOP	==
+ 174:     1	CONST	1
+           	BINOP	-
+ 175:     1	CONST	1
+           	BINOP	==
 ```
