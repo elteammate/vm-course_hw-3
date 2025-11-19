@@ -122,17 +122,6 @@ namespace el {
         }
     }
 
-    struct Range {
-        i32 start;
-        i32 end;
-    };
-
-    struct BasicBlock {
-        Range range;
-        i32 function_offset;
-        i32 last_instruction;
-    };
-
     struct Meta {
         i32 stage;
         std::vector<std::string> errors;
