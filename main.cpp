@@ -137,7 +137,7 @@ namespace el {
         i32 stage;
         std::vector<std::string> errors;
         std::vector<bool> instruction_valid;
-        std::vector<bool> jump_target;
+        std::vector<bool> cflow_jump_target;
     };
 
     struct PublicEntry {
@@ -367,92 +367,158 @@ namespace el {
         }
     }
 
+    struct FlowInfo {
+        bool continues;
+        std::optional<i32> jump_target;
+        bool returns_after;
+    };
+
+    std::variant<FlowInfo, std::string> get_instruction_flow_info(i32 offset) {
+        switch (bc.get_opcode(offset)) {
+        case Op::JMP: {
+            i32 target = bc.get_arg(offset + 1);
+            if (target < 0 || target >= bc.code_size) {
+                return "Invalid target offset";
+            }
+            return FlowInfo{
+                .continues = false,
+                .jump_target = target,
+                .returns_after = false,
+            };
+        }
+        kase Op::CJMPZ:
+        case Op::CJMPNZ: {
+            i32 target = bc.get_arg(offset + 1);
+            if (target < 0 || target >= bc.code_size) {
+                return "Invalid target offset";
+            }
+            return FlowInfo{
+                .continues = true,
+                .jump_target = target,
+                .returns_after = false,
+            };
+        }
+        kase Op::END:
+        case Op::STOP:
+            return FlowInfo{
+                .continues = false,
+                .jump_target = std::nullopt,
+                .returns_after = false,
+            };
+        kase Op::CALLC:
+            return FlowInfo{
+                .continues = true,
+                .jump_target = std::nullopt,
+                .returns_after = true,
+            };
+        kase Op::CALL: {
+            i32 fn = bc.get_arg(offset + 1);
+            if (fn < 0 || fn >= bc.code_size) {
+                return "Invalid function offset";
+            }
+            u8 first_opcode = bc.get_byte(fn);
+            if (first_opcode != (u8)Op::BEGIN && first_opcode != (u8)Op::CBEGIN) {
+                return "Function must start with BEGIN or CBEGIN";
+            }
+            return FlowInfo{
+                .continues = true,
+                .jump_target = fn,
+                .returns_after = true,
+            };
+        }
+        kase Op::CLOSURE: {
+            i32 fn = bc.get_arg(offset + 1);
+            if (fn < 0 || fn >= bc.code_size) {
+                return "Invalid function offset";
+            }
+            u8 first_opcode = bc.get_byte(fn);
+            if (first_opcode != (u8)Op::BEGIN && first_opcode != (u8)Op::CBEGIN) {
+                return "Function must start with BEGIN or CBEGIN";
+            }
+            return FlowInfo{
+                .continues = true,
+                .jump_target = fn,
+                .returns_after = false,
+            };
+        }
+        default:
+            return FlowInfo{
+                .continues = true,
+                .jump_target = std::nullopt,
+                .returns_after = false
+            };
+        }
+    }
+
     void analyze_bytecode_stage1() {
         bc.meta = Meta{};
 
+        if (bc.code_size == 0) {
+            bc.meta.errors.emplace_back("Code section must not be empty");
+            return;
+        }
         if (auto code = bc.code; code[bc.code_size - 1] != 0xff) {
             bc.meta.errors.emplace_back("Code section must end with 0xff byte");
         }
 
         bc.meta.instruction_valid.assign(bc.code_size, false);
-        bc.meta.jump_target.assign(bc.code_size, false);
+        bc.meta.cflow_jump_target.assign(bc.code_size, false);
+        std::vector visited(bc.code_size, false);
 
         std::vector<i32> queue;
-        queue.reserve(bc.public_table_size);
+        queue.reserve(bc.public_table_size + 32);
         for (i32 i = 0; i < bc.public_table_size; i++) {
-            queue.push_back(bc.public_table[i].offset);
+            i32 fn = bc.public_table[i].offset;
+            if (fn < 0 || fn >= bc.code_size) {
+                bc.meta.errors.emplace_back(std::format(
+                    "Function {} points outside of code segment",
+                    bc.get_string(bc.public_table[i].name_idx)
+                ));
+            } else {
+                queue.push_back(fn);
+            }
         }
 
         while (!queue.empty()) {
             i32 offset = queue.back();
             queue.pop_back();
-            bc.meta.jump_target[offset] = true;
+
+            bc.meta.cflow_jump_target[offset] = true;
+
             while (true) {
-                auto size = get_instruction_size(offset);
-                if (std::holds_alternative<std::string>(size)) {
-                    bc.meta.errors.emplace_back(std::get<std::string>(size));
-                    continue;
+                if (visited[offset]) {
+                    break;
                 }
+                visited[offset] = true;
+
+                auto size_result = get_instruction_size(offset);
+                if (std::holds_alternative<std::string>(size_result)) {
+                    bc.meta.errors.emplace_back(std::get<std::string>(size_result));
+                    break;
+                }
+                auto size = std::get<i32>(size_result);
+
+                auto flow_info_result = get_instruction_flow_info(offset);
+                if (std::holds_alternative<std::string>(flow_info_result)) {
+                    bc.meta.errors.emplace_back(std::get<std::string>(flow_info_result));
+                    break;
+                }
+                auto flow_info = std::get<FlowInfo>(flow_info_result);
 
                 bc.meta.instruction_valid[offset] = true;
 
-                switch (bc.get_opcode(offset)) {
-                case Op::JMP: {
-                    i32 target = bc.get_arg(offset + 1);
-                    if (target < 0 || target >= bc.code_size) {
-                        bc.meta.errors.emplace_back("Invalid target offset");
-                        goto break_walk;
-                    }
-                    if (!bc.meta.jump_target[target]) {
-                        queue.push_back(target);
-                    }
-                    goto break_walk;
+                if (flow_info.jump_target.has_value()) {
+                    queue.push_back(flow_info.jump_target.value());
                 }
-                kase Op::CJMPZ:
-                case Op::CJMPNZ: {
-                    i32 target = bc.get_arg(offset + 1);
-                    if (target < 0 || target >= bc.code_size) {
-                        bc.meta.errors.emplace_back("Invalid target offset");
-                        goto break_walk;
-                    }
-                    if (!bc.meta.jump_target[target]) {
-                        queue.push_back(target);
-                    }
-                }
-                kase Op::END:
-                case Op::STOP:
-                    goto break_walk;
-                kase Op::CBEGIN:
-                case Op::BEGIN:
-                    if (!bc.meta.jump_target[offset]) {
-                        bc.meta.errors.emplace_back(
-                            "BEGIN and CBEGIN instructions are only allowed at the start of the function"
-                        );
-                    }
-                    break;
-                kase Op::CALL:
-                case Op::CLOSURE: {
-                    i32 fn = bc.get_arg(offset + 1);
-                    if (fn < 0 || fn >= bc.code_size) {
-                        bc.meta.errors.emplace_back("Invalid function offset");
-                        goto break_walk;
-                    }
-                    u8 first_opcode = bc.get_byte(fn);
-                    if (first_opcode != (u8)Op::BEGIN && first_opcode != (u8)Op::CBEGIN) {
-                        bc.meta.errors.emplace_back("Function must start with BEGIN or CBEGIN");
-                        goto break_walk;
-                    }
-                    if (!bc.meta.jump_target[fn]) {
-                        queue.push_back(fn);
-                    }
-                }
-                default:
+                offset += size;
+                if (offset >= bc.code_size) {
                     break;
                 }
-                offset += std::get<i32>(size);
+                if (flow_info.returns_after) {
+                    bc.meta.cflow_jump_target[offset] = true;
+                }
+                if (!flow_info.continues) break;
             }
-            break_walk:
-            (void)0;
         }
 
         bc.meta.stage = 1;
@@ -652,7 +718,7 @@ void count_idioms() {
         };
         idioms.push_back(inst);
 
-        if (bc.meta.instruction_valid[offset + size] && !bc.meta.jump_target[offset + size]) {
+        if (bc.meta.instruction_valid[offset + size] && !bc.meta.cflow_jump_target[offset + size]) {
             CodeRange bin_inst{
                 .offset = (u32)offset,
                 .binary = true,
